@@ -19,8 +19,39 @@ def get_instaloader_instance(user_agent):
         user_agent=user_agent,
         request_timeout=60,
         max_connection_attempts=3
-        # Removed invalid 'api_version' argument
+       
     )
+
+# --- ADAPTED BACKOFF LOGIC ---
+def get_profile_with_backoff(L, username, max_retries=5):
+    """
+    Adapts the exponential backoff logic from the user snippet.
+    Instead of 'requests.get', we wrap the Instaloader profile fetch.
+    """
+    retries = 0
+    backoff = 60  # Start with 1 minute, as per snippet
+
+    while retries < max_retries:
+        try:
+            print(f"🔍 Fetching profile metadata for @{username} (Attempt {retries+1}/{max_retries})...")
+            # This is the Instaloader equivalent of the request in the snippet
+            profile = instaloader.Profile.from_username(L.context, username)
+            return profile
+            
+        except Exception as e:
+            # Check for 401 Unauthorized (which Instaloader wraps in generic exceptions sometimes)
+            error_msg = str(e)
+            if "401" in error_msg or "login_required" in error_msg or "ConnectionException" in error_msg:
+                print(f"⚠️ Received 401/Connection Error; sleeping {backoff}s before retrying...")
+                time.sleep(backoff)
+                backoff *= 2  # Exponential backoff (60 -> 120 -> 240...)
+                retries += 1
+            else:
+                # If it's a "Profile Not Found" or other fatal error, raise immediately
+                raise e
+                
+    raise Exception(f"❌ Exceeded maximum retries ({max_retries}) due to 401 Unauthorized.")
+
 
 def save_to_csv(data_rows, prefix="scrape"):
     if not data_rows:
@@ -47,6 +78,9 @@ def save_to_csv(data_rows, prefix="scrape"):
 def perform_scrape(L, iterator, amount, label):
     data_rows = []
     count = 0
+
+    #adding loop backoff time for 401 handling
+    loop_backoff = 60  # 1 minute/s
     
     print(f"⬇️  Downloading {amount} posts from {label}...")
 
@@ -72,14 +106,26 @@ def perform_scrape(L, iterator, amount, label):
                 count += 1
                 
                 # Random sleep
-                sleeptime = random.randint(5, 12)
+                sleeptime = random.randint(15, 30)
                 time.sleep(sleeptime) 
                 
+                if count % 10 == 0:
+                    print("      ☕ Taking a 60s break...") # avoiding 401 errors
+                    time.sleep(60)
+
             except Exception as p_err:
                 print(f"   ⚠️ Skipped post: {p_err}")
                 continue
+
     except Exception as e:
         print(f"⚠️ Error during iteration: {e}")
+
+        # If the loop crashes with 401, apply the backoff logic BEFORE exiting.
+        if "401" in str(e) or "429" in str(e):
+            print(f"🛑 Rate limit hit (401). Executing backoff sleep of {loop_backoff}s before saving...")
+            time.sleep(loop_backoff)
+            print("💾 Saving collected data now...")
+            return data_rows
         raise e
 
     return data_rows
@@ -93,7 +139,13 @@ def main_scraper(target_profile, amount):
     print(f"🚀 Attempting Anonymous Scrape of Profile: @{target_profile}...")
     
     try:
-        posts = instaloader.Profile.from_username(L.context, target_profile).get_posts()
+        # UPDATED: Use the new backoff-enabled profile fetcher
+        profile = get_profile_with_backoff(L, target_profile)
+
+        # If we get here, the profile metadata was fetched successfully
+        posts = profile.get_posts()
+        # Alternative direct method (without backoff) - commented out
+        # posts = instaloader.Profile.from_username(L.context, target_profile).get_posts()
         
         data = perform_scrape(L, posts, amount, f"Profile @{target_profile}")
         
@@ -108,13 +160,13 @@ def main_scraper(target_profile, amount):
     except instaloader.LoginRequiredException:
         print(f"❌ Error: Profile @{target_profile} is Private. Anonymous scraping only works on Public profiles.")
     except Exception as e:
-        print(f"❌ Scrape failed: {e}")
+        print(f"❌ Scrape failed after retries: {e}")
         if "401" in str(e):
              print("💡 Tip: 401 means Instagram blocked the request. Try waiting a few hours.")
         sys.exit(1)
 
 if __name__ == "__main__":
-    t_profile = os.environ.get("INPUT_PROFILE", "kaelakovalskia") 
+    t_profile = os.environ.get("INPUT_PROFILE", "instagram") 
     t_amount = int(os.environ.get("INPUT_AMOUNT", 5))
 
     main_scraper(t_profile, t_amount)
