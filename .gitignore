@@ -1,0 +1,27 @@
+--- Python Garbage ---
+
+pycache/
+*.pyc
+
+--- Security: Instaloader Session Files ---
+
+CRITICAL: Prevents your login cookies from leaking
+
+session-*
+
+--- Environments ---
+
+.env
+venv/
+env/
+
+--- IDE Settings (Optional) ---
+
+.vscode/
+.idea/
+
+--- OPTIONAL: Ignore the Test Workflow ---
+
+Uncomment the line below ONLY if you never want to run "Train Only" on GitHub
+
+.github/workflows/mlops_train_test_only.yml

@@ -1,0 +1,5 @@
+instaloader
+pandas
+scikit-learn
+joblib
+numpy

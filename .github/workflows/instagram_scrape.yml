@@ -1,0 +1,49 @@
+# for getting new data later
+
+name: Scrape Instagram Profile
+
+on:
+  workflow_dispatch:
+    inputs:
+      hashtag:
+        description: "Instagram Username to scrape (without @)"
+        required: true
+        default: "instagram"
+      amount:
+        description: "Number of posts"
+        required: true
+        default: "50"
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Scraper
+        env:
+          # passing profile input to the script
+          # \/ scraping by username not hashtag
+          # INPUT_HASHTAG: ${{ github.event.inputs.hashtag }}
+          INPUT_AMOUNT: ${{ github.event.inputs.amount }}
+          # \/ not used in anonymous scraping
+          # IG_USERNAME: ${{ secrets.IG_USERNAME }}
+          # IG_PASSWORD: ${{ secrets.IG_PASSWORD }}
+        run: python scraper.py
+
+      - name: Upload CSV Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: scraped-data
+          path: "data/raw/*.csv"

@@ -1,0 +1,62 @@
+# full end-to-end MLOps pipeline workflow
+
+name: End-to-End MLOps Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Profile to scrape for training data"
+        required: true
+        default: "instagram"
+      amount:
+        description: "Number of posts to add to dataset"
+        required: true
+        default: "50"
+
+jobs:
+  build-and-train:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Setup Environment
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      # 2. Data Collection
+      - name: 🕷️ Run Scraper
+        env:
+          INPUT_PROFILE: ${{ github.event.inputs.profile }}
+          INPUT_AMOUNT: ${{ github.event.inputs.amount }}
+        run: python scraper.py
+
+      # 3. Data Processing
+      - name: 🧹 Process Data
+        # UPDATED: Run directly from src/
+        run: python src/process_data.py
+
+      # 4. Model Training
+      - name: 🤖 Train Model
+        # UPDATED: Run directly from src/
+        run: python src/train_model.py
+
+      # 5. Upload Artifacts
+      - name: Upload Pipeline Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlops-artifacts
+          # UPDATED: Paths match new root structure
+          path: |
+            data/raw/*.csv
+            data/processed/*.csv
+            models/*.pkl
+            models/*.json
